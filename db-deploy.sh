@@ -47,23 +47,27 @@ embed_go() {
 	echo -e "\nGO\n" >> $script 
 }
 embed_file() {
-	if [ -f "$1" ] && [ ${1: -4} == ".sql" ]; then
-		echo "Embedding: $1"
-		# Need to set working directory for sqlcmd to path of the script, so internally :r resolves properly)
-		dir=${1%/*}
-		file=${1##*/}
-		
-		embed_go
-		embed_log "Executing: $1"
-		embed_text ":setvar PATH \"$dir\""
-		embed_text ":setvar FILE \"$file\""
-		embed_go
-		#cat "$1" >> $script
-		
-		# to be safe - remove BOM
-		sed '1s/^\xEF\xBB\xBF//' $1 >> $script
-		
-		embed_go
+	if [ -f "$1" ]; then
+		if [ ${1: -4} == ".sql" ]; then
+			echo "Embedding: $1"
+			# Need to set working directory for sqlcmd to path of the script, so internally :r resolves properly)
+			dir=${1%/*}
+			file=${1##*/}
+			
+			embed_go
+			embed_log "Executing: $1"
+			embed_text ":setvar PATH \"$dir\""
+			embed_text ":setvar FILE \"$file\""
+			embed_go
+			#cat "$1" >> $script
+			
+			# to be safe - remove BOM
+			sed '1s/^\xEF\xBB\xBF//' $1 >> $script
+			
+			embed_go
+		else
+			echo "Skipping: $1"
+		fi
 	else
 		echo "Not found: $1"
 	fi
