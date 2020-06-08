@@ -47,7 +47,7 @@ embed_go() {
 	echo -e "\nGO\n" >> $script 
 }
 embed_file() {
-	if [ -f "$1" ]; then
+	if [ -f "$1" ] && [ ${1: -4} == ".sql" ]; then
 		echo "Embedding: $1"
 		# Need to set working directory for sqlcmd to path of the script, so internally :r resolves properly)
 		dir=${1%/*}
