@@ -18,6 +18,7 @@ echo "Using environment variables:"
 echo " - DATABASE_NAME=$DATABASE_NAME"
 echo " - SERVER_NAME=$SERVER_NAME"
 echo " - SERVER_PORT=$SERVER_PORT"
+echo " - SA_USERNAME=$SA_USERNAME"
 echo " - SA_PASSWORD=$SA_PASSWORD"
 echo " - DB_MODE=$DB_MODE"
 echo "Using parameters:"
@@ -28,9 +29,12 @@ echo " - Dynamic path=$dynpath"
 # used by sqlcmd, casing is important
 export DatabaseName=$DATABASE_NAME
 
+# use "sa" as username if 'SA_USERNAME' not defined
+export SA_USERNAME="${SA_USERNAME:-sa}"
+
 
 exec_scalar() {
-    /opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U sa -P $SA_PASSWORD -d master -Q "set nocount on; $1" -W -h-1
+    /opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d master -Q "set nocount on; $1" -W -h-1
 }
 embed_text() { 
 	echo -e $1 >> $script 
@@ -175,7 +179,7 @@ if [[ -s $script ]]; then
 
 	echo -e '\n\033[0;33m==== Running embedded script in transaction ====\033[0m\n'
 	echo "Script: $script..."
-	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U sa -P $SA_PASSWORD -d master -i $script
+	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d master -i $script
 	echo -e '\n\033[0;32m==== Running embedded script in transaction complete ====\033[0m\n'
 fi
 
@@ -189,6 +193,6 @@ if [ ${dbexists} -eq 0 ] && [ -d "$dynpath" ]; then
 
 	echo -e '\n\033[0;33m==== Running dynamic script ====\033[0m\n'
 	echo "Script: $script..."
-	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U sa -P $SA_PASSWORD -d $DATABASE_NAME -i $script
+	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d $DATABASE_NAME -i $script
 	echo -e '\n\033[0;32m==== Running dynamic script complete ====\033[0m\n'
 fi
