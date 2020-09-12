@@ -21,6 +21,7 @@ echo " - SERVER_PORT=$SERVER_PORT"
 echo " - SA_USERNAME=$SA_USERNAME"
 echo " - SA_PASSWORD=$SA_PASSWORD"
 echo " - DB_MODE=$DB_MODE"
+echo " - ALLOW_MASTER=$ALLOW_MASTER"
 echo "Using parameters:"
 echo " - Base path=$path"
 echo " - Dynamic path=$dynpath"
@@ -32,9 +33,16 @@ export DatabaseName=$DATABASE_NAME
 # use "sa" as username if 'SA_USERNAME' not defined
 export SA_USERNAME="${SA_USERNAME:-sa}"
 
+# if master access is not allowed (serverless cloud), fallback to DATABASE_NAME connection for system queries
+export ALLOW_MASTER="${ALLOW_MASTER:-1}"
+
 
 exec_scalar() {
-    /opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d master -Q "set nocount on; $1" -W -h-1
+	local dbname=$1
+	if [ $ALLOW_MASTER -eq 0 ] && [ $dbname = 'master' ]; then
+		dbname=$DATABASE_NAME
+	fi
+    /opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d $dbname -Q "set nocount on; $2" -W -h-1
 }
 embed_text() { 
 	echo -e $1 >> $script 
@@ -115,11 +123,11 @@ get_rev_new() {
 
 
 echo -n "Testing connection to $SERVER_NAME:$SERVER_PORT... "
-exec_scalar 'select top 0 1'
+exec_scalar 'master' 'select top 0 1'
 echo "Success."
 
 echo "Checking for database $DATABASE_NAME... "
-dbexists=$(exec_scalar "select case when exists (select * from master.sys.databases where name = '$DATABASE_NAME') then 1 else 0 end")
+dbexists=$(exec_scalar 'master' "select case when exists (select * from sys.databases where name = '$DATABASE_NAME') then 1 else 0 end")
 dbempty=0
 dbinit=0 # is initial deploy executed
 rev_new=$(get_rev_new "$path/Directory.Build.props")
@@ -128,7 +136,7 @@ rev_new=${rev_new:-0}
 # If database exists, and DB_MODE is "ForceNew" - drop it and recreate
 if [ $dbexists -eq 1 ] && [ $DB_MODE = 'ForceNew' ]; then
 	echo "Database $DATABASE_NAME exists, but DB_MODE=ForceNew, so will drop and recreate."
-	exec_scalar "ALTER DATABASE [$DATABASE_NAME] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$DATABASE_NAME]"
+	exec_scalar 'master' "ALTER DATABASE [$DATABASE_NAME] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$DATABASE_NAME]"
 	dbexists=0
 	echo "Database $DATABASE_NAME dropped."
 fi
@@ -137,15 +145,17 @@ fi
 # Not dropping & recreating to support cloud variants where thats forbidden (eg Azure Sql Database)
 if [ $dbexists -eq 1 ]; then
 	# count schemas & tables - if any exist, assume db is not empty (lazy assumption, but good enough. Better way?)
-	dbempty=$(exec_scalar "select case when exists(select * from [$DATABASE_NAME].sys.schemas s inner join [$DATABASE_NAME].sys.sysusers u on u.uid = s.principal_id where u.issqluser = 1 and u.name not in ('dbo', 'sys', 'guest', 'INFORMATION_SCHEMA')) or exists(select * from [$DATABASE_NAME].sys.tables) then 0 else 1 end;");
+	dbempty=$(exec_scalar "$DATABASE_NAME" "select case when exists(select * from sys.tables) then 0 else 1 end;");
 fi
+
+#echo "dbexists-$dbexists-"
+#echo "dbempty-$dbempty-"
 
 if [ $dbexists -eq 1 ] && [ $dbempty -eq 0 ]; then
 	dbinit=0 # initial deployment will not be done
 
 	echo "Database $DATABASE_NAME exists and is NOT empty."
-	GetRevProc="[$DATABASE_NAME].Core.GetDatabaseRevision"
-	rev_cur=$(exec_scalar "if (object_id('$GetRevProc') is null) begin select 0 end else begin exec $GetRevProc end")
+	rev_cur=$(exec_scalar $DATABASE_NAME, "if (object_id('Core.GetDatabaseRevision') is null) begin select 0 end else begin exec Core.GetDatabaseRevision end")
 	rev_cur=${rev_cur:-0}
 	
 	if ((rev_cur >= rev_new)); then
@@ -173,7 +183,7 @@ else
 		# If database does not exist, create it.
 		# CREATE DATABASE statement must not be a part of final script, due to transactions
 		echo "Database $DATABASE_NAME not found."
-		exec_scalar "CREATE DATABASE [$DATABASE_NAME]"
+		exec_scalar 'master' "CREATE DATABASE [$DATABASE_NAME]"
 		echo "Database $DATABASE_NAME created."
 	fi
 	
@@ -191,14 +201,14 @@ fi
 if [[ -s $script ]]; then
 
 	# HEADER
-	embed_text_prepend ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$path/Scripts\"\nGO\nSET NUMERIC_ROUNDABORT OFF\nGO\nSET ANSI_PADDING, ANSI_WARNINGS, CONCAT_NULL_YIELDS_NULL, ARITHABORT, QUOTED_IDENTIFIER, ANSI_NULLS ON\nGO\nUSE [$DATABASE_NAME]\nGO\nSET XACT_ABORT ON\nBEGIN TRANSACTION\n"
+	embed_text_prepend ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$path/Scripts\"\nGO\nSET NUMERIC_ROUNDABORT OFF\nGO\nSET ANSI_PADDING, ANSI_WARNINGS, CONCAT_NULL_YIELDS_NULL, ARITHABORT, QUOTED_IDENTIFIER, ANSI_NULLS ON\nGO\nSET XACT_ABORT ON\nBEGIN TRANSACTION\n"
 	
 	# FOOTER
 	embed_text "\n\n\n--FOOTER--\n\nCOMMIT\n\nGO\nDECLARE @Success AS BIT\nSET @Success = 1\nSET NOEXEC OFF\nIF (@Success = 1) PRINT 'The database update succeeded'\nELSE BEGIN\nIF @@TRANCOUNT > 0 ROLLBACK TRANSACTION\nPRINT 'The database update failed'\nEND\nGO"
 
 	echo -e '\n\033[0;33m==== Running embedded script in transaction ====\033[0m\n'
 	echo "Script: $script..."
-	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d master -i $script
+	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d $DATABASE_NAME -i $script
 	echo -e '\n\033[0;33m==== Running embedded script in transaction complete ====\033[0m\n'
 fi
 
