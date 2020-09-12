@@ -120,19 +120,30 @@ echo "Success."
 
 echo "Checking for database $DATABASE_NAME... "
 dbexists=$(exec_scalar "select case when exists (select * from master.sys.databases where name = '$DATABASE_NAME') then 1 else 0 end")
+dbempty=0
+dbinit=0 # is initial deploy executed
 rev_new=$(get_rev_new "$path/Directory.Build.props")
 rev_new=${rev_new:-0}
 
 # If database exists, and DB_MODE is "ForceNew" - drop it and recreate
-if [ ${dbexists} -eq 1 ] && [ $DB_MODE = 'ForceNew' ]; then
+if [ $dbexists -eq 1 ] && [ $DB_MODE = 'ForceNew' ]; then
 	echo "Database $DATABASE_NAME exists, but DB_MODE=ForceNew, so will drop and recreate."
 	exec_scalar "ALTER DATABASE [$DATABASE_NAME] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$DATABASE_NAME]"
 	dbexists=0
 	echo "Database $DATABASE_NAME dropped."
 fi
 
-if [ ${dbexists} -eq 1 ]; then
-	echo "Database $DATABASE_NAME exists."
+# If database exists, but is empty - treat is as 
+# Not dropping & recreating to support cloud variants where thats forbidden (eg Azure Sql Database)
+if [ $dbexists -eq 1 ]; then
+	# count schemas & tables - if any exist, assume db is not empty (lazy assumption, but good enough. Better way?)
+	dbempty=$(exec_scalar "select case when exists(select * from [$DATABASE_NAME].sys.schemas s inner join [$DATABASE_NAME].sys.sysusers u on u.uid = s.principal_id where u.issqluser = 1 and u.name not in ('dbo', 'sys', 'guest', 'INFORMATION_SCHEMA')) or exists(select * from [$DATABASE_NAME].sys.tables) then 0 else 1 end;");
+fi
+
+if [ $dbexists -eq 1 ] && [ $dbempty -eq 0 ]; then
+	dbinit=0 # initial deployment will not be done
+
+	echo "Database $DATABASE_NAME exists and is NOT empty."
 	GetRevProc="[$DATABASE_NAME].Core.GetDatabaseRevision"
 	rev_cur=$(exec_scalar "if (object_id('$GetRevProc') is null) begin select 0 end else begin exec $GetRevProc end")
 	rev_cur=${rev_cur:-0}
@@ -153,10 +164,18 @@ if [ ${dbexists} -eq 1 ]; then
 		embed_log "Database upgraded to revision $rev_new successfuly."
 	fi
 else
-	# CREATE DATABASE statement must not be a part of final script, due to transactions
-	echo "Database $DATABASE_NAME not found."
-	exec_scalar "CREATE DATABASE [$DATABASE_NAME]"
-	echo "Database $DATABASE_NAME created."
+	dbinit=1 # initial deployment will be done
+
+	if [ $dbempty -eq 1 ]; then
+		# Database exists, but its empty... skip "create database", but proceed with initial deployment
+		echo "Database $DATABASE_NAME exists, but is empty. Proceeding with initial deploy."
+	else
+		# If database does not exist, create it.
+		# CREATE DATABASE statement must not be a part of final script, due to transactions
+		echo "Database $DATABASE_NAME not found."
+		exec_scalar "CREATE DATABASE [$DATABASE_NAME]"
+		echo "Database $DATABASE_NAME created."
+	fi
 	
 	embed_file "$path/Scripts/CreateDatabase.sql"
 	embed_go
@@ -180,18 +199,18 @@ if [[ -s $script ]]; then
 	echo -e '\n\033[0;33m==== Running embedded script in transaction ====\033[0m\n'
 	echo "Script: $script..."
 	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d master -i $script
-	echo -e '\n\033[0;32m==== Running embedded script in transaction complete ====\033[0m\n'
+	echo -e '\n\033[0;33m==== Running embedded script in transaction complete ====\033[0m\n'
 fi
 
 # If new db was created, and dynamic path exists, execute dynamic scripts.
 # This is usually used for testing, to populate tables with test/random data
 # /init/dynamic folder is usually used, and is provided by docker readonly volume
-if [ ${dbexists} -eq 0 ] && [ -d "$dynpath" ]; then
+if [ ${dbinit} -eq 1 ] && [ -d "$dynpath" ]; then
 	script=$(mktemp)
 	embed_text ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$path/Scripts\"\nGO\n"
 	embed_folder $dynpath
 
-	echo -e '\n\033[0;33m==== Running dynamic script ====\033[0m\n'
+	echo -e '\n\033[0;32m==== Running dynamic script ====\033[0m\n'
 	echo "Script: $script..."
 	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d $DATABASE_NAME -i $script
 	echo -e '\n\033[0;32m==== Running dynamic script complete ====\033[0m\n'
