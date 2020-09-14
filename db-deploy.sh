@@ -145,7 +145,7 @@ fi
 # Not dropping & recreating to support cloud variants where thats forbidden (eg Azure Sql Database)
 if [ $dbexists -eq 1 ]; then
 	# count schemas & tables - if any exist, assume db is not empty (lazy assumption, but good enough. Better way?)
-	dbempty=$(exec_scalar "$DATABASE_NAME" "select case when exists(select * from sys.tables) then 0 else 1 end;");
+	dbempty=$(exec_scalar $DATABASE_NAME "select case when exists(select * from sys.tables) then 0 else 1 end;");
 fi
 
 #echo "dbexists-$dbexists-"
@@ -155,7 +155,7 @@ if [ $dbexists -eq 1 ] && [ $dbempty -eq 0 ]; then
 	dbinit=0 # initial deployment will not be done
 
 	echo "Database $DATABASE_NAME exists and is NOT empty."
-	rev_cur=$(exec_scalar $DATABASE_NAME, "if (object_id('Core.GetDatabaseRevision') is null) begin select 0 end else begin exec Core.GetDatabaseRevision end")
+	rev_cur=$(exec_scalar $DATABASE_NAME "if (object_id('Core.GetDatabaseRevision') is null) begin select 0 end else begin exec Core.GetDatabaseRevision end")
 	rev_cur=${rev_cur:-0}
 	
 	if ((rev_cur >= rev_new)); then
