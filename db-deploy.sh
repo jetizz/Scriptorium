@@ -2,9 +2,13 @@
 
 # Warning! Save this file as UTF8 without BOM, using Unix line endings (LF) only.
 
+# Exit codes:
+# 0 = database modified
+# 4 = database not touched (this is treated as error because usually script chain is expected to stop)
+# any other = error
+
 
 set -e # Exit immediately if a command exits with a non-zero status.
-script=$(mktemp)
 
 # try get path from param, otherwise use current directory
 path=$PWD
@@ -12,6 +16,7 @@ if [ -d "$1" ]; then
     path=$1;
 fi
 dynpath="$path/dynamic"
+script="" # path to temp file
 
 # Echo used environment variables, makes debugging easier
 echo "Using environment variables:"
@@ -162,7 +167,8 @@ if [ $dbexists -eq 1 ] && [ $dbempty -eq 0 ]; then
 		echo "Deployment skipped, current revision ($rev_cur) is greater or equal to new revision ($rev_new)."
 	else
 		echo "Creating deployment embedded script. Upgrading revision $rev_cur to $rev_new."
-	
+
+		script=$(mktemp)
 		embed_log "Starting deployment. Upgrading database revision $rev_cur -> $rev_new"
 		embed_file "$path/Scripts/PreDeploy.sql"
 		embed_go
@@ -186,7 +192,8 @@ else
 		exec_scalar 'master' "CREATE DATABASE [$DATABASE_NAME]"
 		echo "Database $DATABASE_NAME created."
 	fi
-	
+
+	script=$(mktemp)
 	embed_file "$path/Scripts/CreateDatabase.sql"
 	embed_go
 	embed_file "$path/Scripts/PostInitDeploy.sql"
@@ -198,8 +205,9 @@ else
 fi
 
 
-if [[ -s $script ]]; then
+dbtouched=0 # are any modifications pushed to the database
 
+if [[ -s $script ]]; then
 	# HEADER
 	embed_text_prepend ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$path/Scripts\"\nGO\nSET NUMERIC_ROUNDABORT OFF\nGO\nSET ANSI_PADDING, ANSI_WARNINGS, CONCAT_NULL_YIELDS_NULL, ARITHABORT, QUOTED_IDENTIFIER, ANSI_NULLS ON\nGO\nSET XACT_ABORT ON\nBEGIN TRANSACTION\n"
 	
@@ -208,6 +216,7 @@ if [[ -s $script ]]; then
 
 	echo -e '\n\033[0;33m==== Running embedded script in transaction ====\033[0m\n'
 	echo "Script: $script..."
+	dbtouched=1
 	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d $DATABASE_NAME -i $script
 	echo -e '\n\033[0;33m==== Running embedded script in transaction complete ====\033[0m\n'
 fi
@@ -222,6 +231,17 @@ if [ ${dbinit} -eq 1 ] && [ -d "$dynpath" ]; then
 
 	echo -e '\n\033[0;32m==== Running dynamic script ====\033[0m\n'
 	echo "Script: $script..."
+	dbtouched=1
 	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d $DATABASE_NAME -i $script
 	echo -e '\n\033[0;32m==== Running dynamic script complete ====\033[0m\n'
+fi
+
+if [ $dbtouched -eq 1 ]; then
+	# 0 = success, database modified as required
+	echo 'Script complete - database updated'
+	exit 0;
+else
+	# 4 = success, but no modifications done
+	echo 'Script complete - no modifications done'
+	exit 4;
 fi
