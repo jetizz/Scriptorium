@@ -2,11 +2,6 @@
 
 # Warning! Save this file as UTF8 without BOM, using Unix line endings (LF) only.
 
-# Exit codes:
-# 0 = database modified
-# 4 = database not touched (this is treated as error because usually script chain is expected to stop)
-# any other = error
-
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
@@ -236,18 +231,12 @@ if [ ${dbinit} -eq 1 ] && [ -d "$dynpath" ]; then
 	echo -e '\n\033[0;32m==== Running dynamic script complete ====\033[0m\n'
 fi
 
-if [ $dbtouched -eq 1 ]; then
-	# 0 = success, database modified as required
-	echo 'Script complete - database updated'
-	# Expose status variables
-	export DEPLOY_DBINIT=$dbinit
-	export DEPLOY_DBEMPTY=$dbinit
-	export DEPLOY_DBEXISTS=$dbexists
-	export DEPLOY_REV_FROM=$rev_cur
-	export DEPLOY_REV_TO=$rev_new
-	exit 0;
-else
-	# 4 = success, but no modifications done
-	echo 'Script complete - no modifications done'
-	exit 4;
-fi
+
+echo 'Script complete - database updated'
+# Expose status variables
+export DEPLOY_DBINIT=$dbinit
+export DEPLOY_DBEMPTY=$dbinit
+export DEPLOY_DBEXISTS=$dbexists
+export DEPLOY_DBTOUCHED=$dbtouched
+export DEPLOY_REV_FROM=$rev_cur
+export DEPLOY_REV_TO=$rev_new
