@@ -239,6 +239,12 @@ fi
 if [ $dbtouched -eq 1 ]; then
 	# 0 = success, database modified as required
 	echo 'Script complete - database updated'
+	# Expose status variables
+	export DEPLOY_DBINIT=$dbinit
+	export DEPLOY_DBEMPTY=$dbinit
+	export DEPLOY_DBEXISTS=$dbexists
+	export DEPLOY_REV_FROM=$rev_cur
+	export DEPLOY_REV_TO=$rev_new
 	exit 0;
 else
 	# 4 = success, but no modifications done
