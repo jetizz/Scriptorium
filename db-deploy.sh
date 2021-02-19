@@ -104,7 +104,7 @@ embed_migration() {
 		# 1. this must be a directory
 		# 2. revision (last segment of the dir) - must be an integer
 		# 3. revision must be in <from, to] range
-        if [ -d "$i" ] && [ ! -z "${rev##*[!0-9]*}" ] && ((from < rev)) && (( rev <= to ));then
+        if [ -d "$i" ] && [ ! -z "${rev##*[!0-9]*}" ] && ((10#$from < 10#$rev)) && (( 10#$rev <= 10#$to ));then
             embed_log "Running migration revision $rev from $i."
 			embed_text ":setvar REVISION \"$rev\""
 			embed_text ":setvar REVISION_FROM \"$from\""
@@ -158,7 +158,7 @@ if [ $dbexists -eq 1 ] && [ $dbempty -eq 0 ]; then
 	rev_cur=$(exec_scalar $DATABASE_NAME "if (object_id('Core.GetDatabaseRevision') is null) begin select 0 end else begin exec Core.GetDatabaseRevision end")
 	rev_cur=${rev_cur:-0}
 	
-	if ((rev_cur >= rev_new)); then
+	if ((10#$rev_cur >= 10#$rev_new)); then
 		echo "Deployment skipped, current revision ($rev_cur) is greater or equal to new revision ($rev_new)."
 	else
 		echo "Creating deployment embedded script. Upgrading revision $rev_cur to $rev_new."
