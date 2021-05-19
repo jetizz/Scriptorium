@@ -157,13 +157,19 @@ if [ $dbexists -eq 1 ] && [ $dbempty -eq 0 ]; then
 	echo "Database $DATABASE_NAME exists and is NOT empty."
 	rev_cur=$(exec_scalar $DATABASE_NAME "if (object_id('Core.GetDatabaseRevision') is null) begin select 0 end else begin exec Core.GetDatabaseRevision end")
 	rev_cur=${rev_cur:-0}
+	script=$(mktemp)
 	
 	if ((10#$rev_cur >= 10#$rev_new)); then
-		echo "Deployment skipped, current revision ($rev_cur) is greater or equal to new revision ($rev_new)."
+		echo "Deployment skipped, current revision ($rev_cur) is greater or equal to new revision ($rev_new). Only PreDeploy and PostDeploy scripts will be executed!"
+
+		embed_log "Starting deployment. Revision will remain unchanged."
+		embed_file "$path/Scripts/PreDeploy.sql"
+		embed_go
+		embed_file "$path/Scripts/PostDeploy.sql"
+		embed_log "Database deployment completed successfuly."
 	else
 		echo "Creating deployment embedded script. Upgrading revision $rev_cur to $rev_new."
 
-		script=$(mktemp)
 		embed_log "Starting deployment. Upgrading database revision $rev_cur -> $rev_new"
 		embed_file "$path/Scripts/PreDeploy.sql"
 		embed_go
@@ -199,9 +205,6 @@ else
 	embed_log "Database upgraded to revision $rev_new successfuly."
 fi
 
-
-dbtouched=0 # are any modifications pushed to the database
-
 if [[ -s $script ]]; then
 	# HEADER
 	embed_text_prepend ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$path/Scripts\"\nGO\nSET NUMERIC_ROUNDABORT OFF\nGO\nSET ANSI_PADDING, ANSI_WARNINGS, CONCAT_NULL_YIELDS_NULL, ARITHABORT, QUOTED_IDENTIFIER, ANSI_NULLS ON\nGO\nSET XACT_ABORT ON\nBEGIN TRANSACTION\n"
@@ -211,7 +214,7 @@ if [[ -s $script ]]; then
 
 	echo -e '\n\033[0;33m==== Running embedded script in transaction ====\033[0m\n'
 	echo "Script: $script..."
-	dbtouched=1
+
 	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d $DATABASE_NAME -i $script
 	echo -e '\n\033[0;33m==== Running embedded script in transaction complete ====\033[0m\n'
 fi
@@ -226,7 +229,7 @@ if [ ${dbinit} -eq 1 ] && [ -d "$dynpath" ]; then
 
 	echo -e '\n\033[0;32m==== Running dynamic script ====\033[0m\n'
 	echo "Script: $script..."
-	dbtouched=1
+
 	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d $DATABASE_NAME -i $script
 	echo -e '\n\033[0;32m==== Running dynamic script complete ====\033[0m\n'
 fi
@@ -237,6 +240,5 @@ echo 'Script complete - database updated'
 export DEPLOY_DBINIT=$dbinit
 export DEPLOY_DBEMPTY=$dbinit
 export DEPLOY_DBEXISTS=$dbexists
-export DEPLOY_DBTOUCHED=$dbtouched
 export DEPLOY_REV_FROM=$rev_cur
 export DEPLOY_REV_TO=$rev_new
