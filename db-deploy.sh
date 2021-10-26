@@ -26,6 +26,7 @@ echo " - ALLOW_MASTER=$ALLOW_MASTER"
 echo "Using parameters:"
 echo " - Base path=$path"
 echo " - Dynamic path=$dynpath"
+echo " - Static path=$sttpath"
 
 
 # used by sqlcmd, casing is important
@@ -222,7 +223,7 @@ fi
 
 # If static path exists, execute all scripts located there.
 # /init/static folder is usually used, and is provided by docker readonly volume
-if [ ${dbinit} -eq 1 ] && [ -d "$sttpath" ]; then
+if [ -d "$sttpath" ]; then
 	script=$(mktemp)
 	embed_text ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$sttpath\"\nGO\n"
 	embed_folder $sttpath
@@ -239,7 +240,7 @@ fi
 # /init/dynamic folder is usually used, and is provided by docker readonly volume
 if [ ${dbinit} -eq 1 ] && [ -d "$dynpath" ]; then
 	script=$(mktemp)
-	embed_text ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$sttpath\"\nGO\n"
+	embed_text ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$dynpath\"\nGO\n"
 	embed_folder $dynpath
 
 	echo -e '\n\033[0;32m==== Running dynamic script ====\033[0m\n'
