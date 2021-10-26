@@ -11,6 +11,7 @@ if [ -d "$1" ]; then
     path=$1;
 fi
 dynpath="$path/dynamic"
+sttpath="$path/static"
 script="" # path to temp file
 
 # Echo used environment variables, makes debugging easier
@@ -219,12 +220,26 @@ if [[ -s $script ]]; then
 	echo -e '\n\033[0;33m==== Running embedded script in transaction complete ====\033[0m\n'
 fi
 
+# If static path exists, execute all scripts located there.
+# /init/static folder is usually used, and is provided by docker readonly volume
+if [ ${dbinit} -eq 1 ] && [ -d "$sttpath" ]; then
+	script=$(mktemp)
+	embed_text ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$sttpath\"\nGO\n"
+	embed_folder $sttpath
+
+	echo -e '\n\033[0;32m==== Running static script ====\033[0m\n'
+	echo "Script: $script..."
+
+	/opt/mssql-tools/bin/sqlcmd -S $SERVER_NAME,$SERVER_PORT -U $SA_USERNAME -P $SA_PASSWORD -d $DATABASE_NAME -i $script
+	echo -e '\n\033[0;32m==== Running static script complete ====\033[0m\n'
+fi
+
 # If new db was created, and dynamic path exists, execute dynamic scripts.
 # This is usually used for testing, to populate tables with test/random data
 # /init/dynamic folder is usually used, and is provided by docker readonly volume
 if [ ${dbinit} -eq 1 ] && [ -d "$dynpath" ]; then
 	script=$(mktemp)
-	embed_text ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$path/Scripts\"\nGO\n"
+	embed_text ":setvar ROOT \"$path\"\n:setvar SCRIPTS \"$sttpath\"\nGO\n"
 	embed_folder $dynpath
 
 	echo -e '\n\033[0;32m==== Running dynamic script ====\033[0m\n'
