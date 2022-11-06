@@ -265,13 +265,15 @@ export DEPLOY_DBEMPTY=$dbinit
 export DEPLOY_DBEXISTS=$dbexists
 export DEPLOY_REV_FROM=$rev_cur
 export DEPLOY_REV_TO=$rev_new
+export DEPLOY_COMPLETE=1
 
 echo 'Environment variables set:'
-echo "  DEPLOY_DBINIT=$dbinit"
-echo "  DEPLOY_DBEMPTY=$dbinit"
-echo "  DEPLOY_DBEXISTS=$dbexists"
-echo "  DEPLOY_REV_FROM=$rev_cur"
-echo "  DEPLOY_REV_TO=$rev_new"
+echo "  DEPLOY_DBINIT=$DEPLOY_DBINIT"
+echo "  DEPLOY_DBEMPTY=$DEPLOY_DBEMPTY"
+echo "  DEPLOY_DBEXISTS=$DEPLOY_DBEXISTS"
+echo "  DEPLOY_REV_FROM=$DEPLOY_REV_FROM"
+echo "  DEPLOY_REV_TO=$DEPLOY_REV_TO"
+echo "  DEPLOY_COMPLETE=$DEPLOY_COMPLETE"
 echo 'Script complete.'
 
 exit 0
