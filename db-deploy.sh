@@ -275,5 +275,3 @@ echo "  DEPLOY_REV_FROM=$DEPLOY_REV_FROM"
 echo "  DEPLOY_REV_TO=$DEPLOY_REV_TO"
 echo "  DEPLOY_COMPLETE=$DEPLOY_COMPLETE"
 echo 'Script complete.'
-
-exit 0
