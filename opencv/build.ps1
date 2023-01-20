@@ -1,1 +1,1 @@
-docker buildx build --push --platform "linux/arm64,linux/amd64" --tag jetiz/ubuntu20-dotnet6-opencv4.5.3:202203 .
+docker buildx build -f dotnet7-cv4.7.0.Dockerfile --push --platform "linux/arm64,linux/amd64" --tag jetiz/ubuntu20-dotnet6-opencv4.7.0:202301 .
