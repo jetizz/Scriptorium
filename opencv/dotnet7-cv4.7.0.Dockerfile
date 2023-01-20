@@ -1,3 +1,5 @@
+# https://github.com/shimat/opencvsharp/tree/master/docker/ubuntu22-dotnet6sdk-opencv4.7.0
+
 FROM mcr.microsoft.com/dotnet/aspnet:7.0-jammy as builder
 
 ENV DEBIAN_FRONTEND=noninteractive
